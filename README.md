@@ -1,6 +1,6 @@
 # SOFI × Pdots 文献周报
 
-SOFI × Pdots 周报扩展：请先阅读 [中文使用说明](docs/SOFI-Pdots使用说明.md)，配置示例为 [weekly.example.toml](weekly.example.toml)。本机调度需要电脑在线；公开仓库不含凭据、私人周报或收件地址。
+SOFI × Pdots 周报扩展：请先阅读 [中文使用说明](docs/SOFI-Pdots使用说明.md)，配置示例为 [weekly.example.toml](weekly.example.toml)。支持本机 launchd 或[私有云端部署](docs/云端部署.md)。云端运行不依赖个人电脑开机；公开仓库不含凭据、私人周报或收件地址。
 
 上游 Paper Digest 的原始说明如下。
 
