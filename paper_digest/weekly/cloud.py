@@ -79,7 +79,20 @@ class Vault:
     def locate(self, create=False):
         for page in range(1, 11):
             rows = self.api("GET", f"/releases?per_page=100&page={page}")
-            found = [r for r in rows if r["tag_name"] == TAG]
+            # GitHub can replace a draft's unpublished tag with untagged-<id>.
+            found = [
+                r
+                for r in rows
+                if r["tag_name"] == TAG
+                or (
+                    r.get("draft")
+                    and r.get("name") == "Private encrypted runtime checkpoints"
+                )
+            ]
+            if len(found) > 1:
+                raise CloudError(
+                    "Multiple state releases; manual reconciliation required"
+                )
             if found:
                 self.release = found[0]
                 self.pointer = json.loads(self.release.get("body") or "{}").get(

@@ -17,6 +17,21 @@ from tests.test_weekly import ROOT
 
 
 class CloudTests(unittest.TestCase):
+    def test_unpublished_draft_tag_can_be_replaced_by_github(self):
+        with patch.object(Vault, "api", return_value={"private": True}):
+            vault = Vault("owner/private", "test", Fernet.generate_key().decode())
+        release = {
+            "id": 42,
+            "tag_name": "untagged-example",
+            "draft": True,
+            "name": "Private encrypted runtime checkpoints",
+            "body": json.dumps({"latest": {"asset_id": 7}}),
+        }
+        with patch.object(Vault, "api", return_value=[release]):
+            vault.locate()
+        self.assertEqual(vault.release["id"], 42)
+        self.assertEqual(vault.pointer["asset_id"], 7)
+
     def test_public_repository_rejected_before_credentials(self):
         with patch.object(Vault, "api", return_value={"private": False}):
             with self.assertRaises(CloudError):
