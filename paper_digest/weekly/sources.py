@@ -1,10 +1,12 @@
 """Paged official APIs with per-query coverage receipts and raw evidence."""
 
+import gzip
 import json
 import os
 import re
 import xml.etree.ElementTree as ET
-from datetime import UTC, datetime
+from collections import deque
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 from urllib.request import Request
 
@@ -14,10 +16,21 @@ from paper_digest.network import fetch_bytes_with_retry
 from paper_digest.openalex_client import parse_openalex_work
 from paper_digest.pubmed_client import _MONTH_NUMBERS, parse_pubmed_article
 
-from .model import date_parts, doi, record
+from .model import date_parts, doi, rank, record
 
 EP = "https://www.ebi.ac.uk/europepmc/webservices/rest"
 NCBI = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
+
+# Independent bounds: a small generic limit must not starve later channels.
+FREE_LIMITS = {
+    "crossref": {"max_pages": 3, "max_requests": 100},
+    "openalex": {"max_pages": 30, "max_requests": 90},
+    "biorxiv": {"max_pages": 800, "max_requests": 800},
+}
+
+
+class RequestBudgetExceeded(RuntimeError):
+    pass
 
 
 def clean(text):
@@ -78,14 +91,23 @@ class Collector:
         self.source_requests = {}
         (out / "evidence").mkdir(parents=True, exist_ok=True)
 
+    def limit(self, source, name):
+        fallback = self.cfg["search"].get(
+            "max_requests_per_source" if name == "max_requests" else name, 40
+        )
+        return (
+            self.cfg["search"]
+            .get("source_limits", {})
+            .get(source, {})
+            .get(name, FREE_LIMITS.get(source, {}).get(name, fallback))
+        )
+
     def get(self, base, params=None, source="lookup", headers=None):
-        self.source_requests[source] = self.source_requests.get(source, 0) + 1
-        if self.source_requests[source] > self.cfg["search"].get(
-            "max_requests_per_source", 40
-        ):
-            raise RuntimeError(
+        if self.source_requests.get(source, 0) >= self.limit(source, "max_requests"):
+            raise RequestBudgetExceeded(
                 "configured request budget exhausted; coverage incomplete"
             )
+        self.source_requests[source] = self.source_requests.get(source, 0) + 1
         params = params or {}
         public = {k: v for k, v in params.items() if k not in ("api_key", "key")}
         url = base + ("?" + urlencode(params) if params else "")
@@ -98,7 +120,13 @@ class Collector:
                 },
             ),
             timeout_seconds=self.cfg["search"]["timeout"],
-            request_delay_seconds=3.1 if source == "arxiv" else 0.36,
+            request_delay_seconds=(
+                3.1
+                if source == "arxiv"
+                else 1.05
+                if source in {"crossref", "openalex"}
+                else 0.36
+            ),
             retry_attempts=self.cfg["search"]["retries"],
             retry_backoff_seconds=2,
             max_retry_delay_seconds=60,
@@ -107,7 +135,7 @@ class Collector:
         )
         self.counter += 1
         name = f"evidence/{source}-{self.counter:05d}"
-        (self.out / (name + ".raw")).write_bytes(raw)
+        (self.out / (name + ".raw.gz")).write_bytes(gzip.compress(raw, mtime=0))
         (self.out / (name + ".json")).write_text(
             json.dumps(
                 {"url": base, "params": public, "retrieved_at": self.now.isoformat()},
@@ -115,7 +143,7 @@ class Collector:
                 indent=2,
             )
         )
-        return raw, name + ".raw"
+        return raw, name + ".raw.gz"
 
     def collect(self, start, end, source_starts=None):
         records = []
@@ -126,6 +154,7 @@ class Collector:
                 if source == "biorxiv"
                 else queries(self.cfg, source)
             )
+            pending = deque()
             for channel, query in qs:
                 receipt = dict(
                     source=source,
@@ -133,41 +162,90 @@ class Collector:
                     query=query,
                     start=source_start,
                     end=end,
-                    status="ok",
+                    status="pending",
                     count=0,
+                    retained_count=0,
+                    pages=0,
                     truncated=False,
                 )
+                if source == "biorxiv":
+                    receipt["limitation"] = (
+                        "全分类分页扫描；仅领域规则命中进入候选，完整原始响应以 gzip 归档"
+                    )
                 self.receipts.append(receipt)
+                pending.append(
+                    (receipt, iter(self.pages(source, query, source_start, end)))
+                )
+            # Round robin: every independent query gets its first page before any
+            # query consumes a second page. Never silently drop later channels.
+            while pending:
+                receipt, iterator = pending.popleft()
                 try:
-                    for batch, more in self.pages(source, query, source_start, end):
-                        records.extend(batch)
-                        receipt["count"] += len(batch)
-                        receipt["truncated"] = more
+                    batch, more = next(iterator)
+                    receipt["count"] += len(batch)
+                    retained = (
+                        [
+                            p
+                            for p in batch
+                            if rank(
+                                p, self.cfg["search"].get("extra_priority_terms", [])
+                            )[0]
+                            > 0
+                        ]
+                        if source == "biorxiv"
+                        else batch
+                    )
+                    records.extend(retained)
+                    receipt["retained_count"] += len(retained)
+                    receipt["pages"] += 1
+                    receipt["truncated"] = more
+                    receipt["status"] = "partial" if more else "ok"
+                    if more:
+                        pending.append((receipt, iterator))
+                    if source == "biorxiv" and receipt["pages"] % 50 == 0:
+                        print(
+                            f"biorxiv: {receipt['pages']} pages, {receipt['count']} records scanned",
+                            flush=True,
+                        )
+                except StopIteration:
+                    receipt["status"] = "partial" if receipt["truncated"] else "ok"
                     if receipt["truncated"]:
-                        receipt["status"] = "partial"
+                        receipt["limitation"] = (
+                            receipt.get("limitation", "")
+                            + "; configured page limit reached"
+                        )
+                except RequestBudgetExceeded as exc:
+                    for row, _ in [(receipt, iterator), *pending]:
+                        row.update(
+                            status="partial", truncated=True, limitation=str(exc)
+                        )
+                    pending.clear()
                 except Exception as exc:
-                    # Do not expose key-bearing URLs or server payloads in logs.
-                    receipt["status"] = "failed"
-                    receipt["error"] = (
-                        type(exc).__name__
+                    receipt.update(
+                        status="failed",
+                        error=type(exc).__name__
                         + ": "
                         + re.sub(r"(api_key|key)=[^&\s]+", r"\1=REDACTED", str(exc))[
                             :400
-                        ]
+                        ],
                     )
+                    receipt["remaining_queries_skipped"] = len(pending)
+                    for row, _ in pending:
+                        row.update(
+                            status="partial",
+                            truncated=True,
+                            limitation="source circuit breaker: later pages/queries skipped",
+                        )
+                    pending.clear()
                 (self.out / "sources.progress.json").write_text(
                     json.dumps(self.receipts, ensure_ascii=False, indent=2)
                 )
-                print(
-                    f"{source}/{channel}: {receipt['status']}, {receipt['count']}",
-                    flush=True,
-                )
-                if receipt["status"] == "failed":
-                    # Circuit breaker avoids repeatedly hitting an unavailable API.
-                    receipt["remaining_queries_skipped"] = (
-                        len(qs) - qs.index((channel, query)) - 1
+            for row in self.receipts:
+                if row["source"] == source:
+                    print(
+                        f"{source}/{row['channel']}: {row['status']}, {row['count']}, pages={row['pages']}",
+                        flush=True,
                     )
-                    break
         # A highly specific supplemental title is a useful lead, not a paper itself.
         supplemental = list(
             dict.fromkeys(
@@ -215,7 +293,7 @@ class Collector:
     def pages(self, source, query, start, end):
         size = self.cfg["search"]["page_size"]
         cursor = "*"
-        for page in range(self.cfg["search"]["max_pages"]):
+        for page in range(self.limit(source, "max_pages")):
             batch = []
             if source == "europepmc":
                 raw, ev = self.get(
@@ -242,7 +320,7 @@ class Collector:
                     "https://api.crossref.org/works",
                     {
                         "query.bibliographic": query,
-                        "filter": f"from-index-date:{start},until-index-date:{end}",
+                        "filter": f"from-index-date:{start},until-index-date:{end},from-pub-date:{(self.now - timedelta(days=self.cfg['backfill_days'])).date().isoformat()},until-pub-date:{end}",
                         "rows": size,
                         "cursor": cursor,
                     },
@@ -291,6 +369,7 @@ class Collector:
                 for node in ET.fromstring(raw).findall("PubmedArticle"):
                     batch.append(pubmed_record(node))
             elif source == "openalex":
+                size = min(size, 100)
                 params = {
                     "search": query,
                     "filter": f"from_publication_date:{start},to_publication_date:{end}",
@@ -299,6 +378,8 @@ class Collector:
                 key = os.getenv("OPENALEX_API_KEY")
                 if key:
                     params.update(api_key=key, cursor=cursor)
+                else:
+                    params["page"] = page + 1
                 raw, ev = self.get("https://api.openalex.org/works", params, source)
                 data = json.loads(raw)
                 for x in data["results"]:
@@ -319,9 +400,9 @@ class Collector:
                         batch.append(r)
                 more = (page + 1) * size < data["meta"]["count"]
                 cursor = data["meta"].get("next_cursor")
-                if not key:
+                if not key and (page + 2) * size > 10000:
                     yield with_evidence(batch, ev), more
-                    return  # anonymous mode: report pagination limitation explicitly
+                    return  # official basic paging depth; a free key enables cursor paging
             elif source == "arxiv":
                 raw, ev = self.get(
                     "https://export.arxiv.org/api/query",

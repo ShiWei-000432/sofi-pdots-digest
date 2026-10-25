@@ -123,7 +123,7 @@ class CodexCLIProvider:
                 env = {
                     k: v
                     for k, v in os.environ.items()
-                    if k not in ["OPENAI_API_KEY", "CODEX_API_KEY"]
+                    if not k.endswith("_API_KEY")
                     and not k.startswith(
                         ("SMTP_", "CLOUD_", "GITHUB_", "GH_", "ACTIONS_")
                     )

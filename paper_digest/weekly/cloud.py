@@ -292,6 +292,7 @@ def main():
         "check",
         "weekly",
         "manual",
+        "fetch",
     }:
         raise CloudError("Unsupported operation")
     request_key = manual_request(operation)
@@ -348,6 +349,39 @@ def main():
             print("Private encrypted state initialized; schedule remains inactive")
         elif operation == "pause":
             store.meta("cloud_active", False)
+        elif operation == "fetch":
+            _, out = run(cfg, store, now, root / "weekly-output", fetch_only=True)
+            rows = json.loads((out / "sources.json").read_text())
+            candidates = json.loads((out / "candidates.json").read_text())
+            print(
+                "Fetch-only audit: "
+                + json.dumps(
+                    {
+                        "archive": str(out.relative_to(root)),
+                        "fetched": sum(r["count"] for r in rows),
+                        "unique": len(candidates),
+                        "domain_matches": sum(p["score"] > 0 for p in candidates),
+                        "sources": [
+                            {
+                                k: r.get(k)
+                                for k in [
+                                    "source",
+                                    "channel",
+                                    "status",
+                                    "count",
+                                    "pages",
+                                    "limitation",
+                                    "error",
+                                ]
+                            }
+                            for r in rows
+                        ],
+                        "email_sent": False,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
         elif operation == "test":
             cloud_test(cfg, store, root)
         elif operation == "activate":

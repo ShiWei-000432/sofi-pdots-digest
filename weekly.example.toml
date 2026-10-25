@@ -22,6 +22,17 @@ pdots = ["Pdot", "Pdots", "polymer dots", "semiconducting polymer dots", "conjug
 methods = ["fluorescence fluctuation", "super-resolution microscopy", "single-molecule localization", "computational microscopy"]
 qualifiers = ["artifact", "fidelity", "uncertainty", "confidence", "self-supervised", "physics-informed", "cumulant", "non-stationary", "blinking", "polarization", "background correction", "bleaching"]
 
+# Free API bounds per source, independent of the generic fallback above.
+[search.source_limits.crossref]
+max_pages = 3
+max_requests = 100
+[search.source_limits.openalex]
+max_pages = 30
+max_requests = 90
+[search.source_limits.biorxiv]
+max_pages = 800
+max_requests = 800
+
 [analysis]
 provider = "codex_cli"
 # model = "..." # Omit to use local Codex default.

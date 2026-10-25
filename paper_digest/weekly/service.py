@@ -45,7 +45,7 @@ def run(cfg, store, now, root, reuse=None, fetch_only=False):
         }
         records = collector.collect(earliest, end, starts)
         receipts = collector.receipts
-        fetched = len(records)
+        fetched = sum(r["count"] for r in receipts)
     unique = merge(records)
     for p in unique:
         p["score"], p["category"], p["score_reasons"] = rank(

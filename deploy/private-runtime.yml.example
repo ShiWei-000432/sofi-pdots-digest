@@ -7,7 +7,7 @@ on:
         required: true
         default: check
         type: choice
-        options: [check, bootstrap, test, activate, pause, weekly, manual]
+        options: [check, bootstrap, test, activate, pause, weekly, manual, fetch]
   schedule:
     - cron: '0 1 * * 5'
     - cron: '17 1 * * *'
@@ -43,5 +43,6 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           CLOUD_STATE_KEY: ${{ secrets.CLOUD_STATE_KEY }}
           CLOUD_BOOTSTRAP: ${{ secrets.CLOUD_BOOTSTRAP }}
+          OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
           CLOUD_OPERATION: ${{ inputs.operation || 'check' }}
         run: python -m paper_digest.weekly.cloud

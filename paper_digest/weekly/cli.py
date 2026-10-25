@@ -32,6 +32,16 @@ def load(path):
     for name in ["page_size", "max_pages", "timeout", "retries"]:
         if cfg["search"][name] < 1:
             raise ValueError("search." + name + " must be positive")
+    for source, limits in cfg["search"].get("source_limits", {}).items():
+        if source not in cfg["sources"]:
+            continue
+        for name, value in limits.items():
+            if (
+                name not in {"max_pages", "max_requests"}
+                or type(value) is not int
+                or value < 1
+            ):
+                raise ValueError("Invalid per-source search limits")
     if cfg["search"]["page_size"] > 200:
         raise ValueError("page_size must be <=200")
     if not (
