@@ -20,6 +20,20 @@ class CoverageTests(unittest.TestCase):
             cfg, Path(folder), datetime(2026, 10, 25, tzinfo=ZoneInfo("Asia/Shanghai"))
         )
 
+    def test_crossref_uses_configured_qualifiers_instead_of_fixed_subset(self):
+        from paper_digest.weekly.sources import queries
+
+        cfg = load(ROOT / "weekly.example.toml")
+        qs = [q for channel, q in queries(cfg, "crossref") if channel == "C"]
+        for method in cfg["search"]["methods"]:
+            for qualifier in cfg["search"]["qualifiers"]:
+                self.assertIn(method + " " + qualifier, qs)
+        cfg["search"]["qualifiers"] = ["custom reliability"]
+        self.assertEqual(
+            len([q for channel, q in queries(cfg, "crossref") if channel == "C"]),
+            len(cfg["search"]["methods"]),
+        )
+
     def test_fair_queries_do_not_starve_channel_c(self):
         with tempfile.TemporaryDirectory() as d:
             c = self.collector(d, "crossref")

@@ -23,7 +23,7 @@ NCBI = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
 
 # Independent bounds: a small generic limit must not starve later channels.
 FREE_LIMITS = {
-    "crossref": {"max_pages": 3, "max_requests": 100},
+    "crossref": {"max_pages": 3, "max_requests": 180},
     "openalex": {"max_pages": 30, "max_requests": 90},
     "biorxiv": {"max_pages": 800, "max_requests": 800},
 }
@@ -56,17 +56,7 @@ def queries(cfg, source):
             [("A", q) for q in s["sofi"][:-1]]
             + [("A", "SOFI fluorescence microscopy")]
             + [("B", q + " fluorescence") for q in s["pdots"]]
-            + [
-                ("C", q + " " + w)
-                for q in s["methods"]
-                for w in [
-                    "uncertainty",
-                    "artifact",
-                    "cumulant",
-                    "self-supervised",
-                    "polarization",
-                ]
-            ]
+            + [("C", q + " " + w) for q in s["methods"] for w in s["qualifiers"]]
         )
     return [
         (

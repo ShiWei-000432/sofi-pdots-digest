@@ -25,7 +25,7 @@ qualifiers = ["artifact", "fidelity", "uncertainty", "confidence", "self-supervi
 # Free API bounds per source, independent of the generic fallback above.
 [search.source_limits.crossref]
 max_pages = 3
-max_requests = 100
+max_requests = 180
 [search.source_limits.openalex]
 max_pages = 30
 max_requests = 90
