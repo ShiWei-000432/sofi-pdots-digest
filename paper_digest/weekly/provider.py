@@ -124,7 +124,9 @@ class CodexCLIProvider:
                     k: v
                     for k, v in os.environ.items()
                     if k not in ["OPENAI_API_KEY", "CODEX_API_KEY"]
-                    and not k.startswith("SMTP_")
+                    and not k.startswith(
+                        ("SMTP_", "CLOUD_", "GITHUB_", "GH_", "ACTIONS_")
+                    )
                 }
                 proc = subprocess.Popen(
                     cmd,
@@ -149,6 +151,18 @@ class CodexCLIProvider:
                         proc.communicate()
                     last_error = "Codex timeout; cached candidates retained"
                     continue
+                except BaseException:
+                    os.killpg(proc.pid, signal.SIGTERM)
+                    try:
+                        proc.communicate(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                        proc.communicate()
+                    raise
+                finally:
+                    # Codex may rotate auth even on a failed request. Persist it now.
+                    if checkpoint := self.cfg.get("_checkpoint"):
+                        checkpoint()
                 if proc.returncode:
                     text = (stdout + stderr).lower()
                     reason = (

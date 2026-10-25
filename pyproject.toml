@@ -33,6 +33,7 @@ Changelog = "https://github.com/X-PG13/paper-digest/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 weekly = ["jsonschema>=4.23,<5", "Markdown>=3.7,<4", "bleach>=6.2,<7"]
+cloud = ["cryptography>=44,<47", "requests>=2.32,<3"]
 translation = [
   "ctranslate2==4.8.1",
   "sentencepiece==0.2.2",

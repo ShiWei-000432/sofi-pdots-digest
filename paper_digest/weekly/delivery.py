@@ -84,6 +84,9 @@ def send(cfg, store, report, out):
     def data():
         store.db.execute("UPDATE outbox SET status='sending' WHERE id=?", (key,))
         store.db.commit()
+        # Cloud runs must durably publish the ambiguous state BEFORE SMTP DATA.
+        if checkpoint := cfg.get("_checkpoint"):
+            checkpoint()
 
     def accepted():
         now = datetime.now(UTC).isoformat()
@@ -97,6 +100,8 @@ def send(cfg, store, report, out):
                 "INSERT OR REPLACE INTO meta VALUES (?,?)",
                 ("last_sent_at", json.dumps(now)),
             )
+        if checkpoint := cfg.get("_checkpoint"):
+            checkpoint()
 
     try:
         send_weekly_message(config, message, data, accepted)
