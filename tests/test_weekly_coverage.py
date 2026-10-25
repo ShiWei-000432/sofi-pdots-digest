@@ -56,6 +56,19 @@ class CoverageTests(unittest.TestCase):
             self.assertTrue(all(r["count"] == 1 for r in c.receipts))
             self.assertTrue(all(r["status"] == "partial" for r in c.receipts))
 
+    def test_openalex_rechecks_backfill_for_late_indexed_papers(self):
+        with tempfile.TemporaryDirectory() as d:
+            c = self.collector(d, "openalex")
+            starts = []
+
+            def pages(source, query, start, end):
+                starts.append(start)
+                yield [], False
+
+            with patch.object(c, "pages", side_effect=pages):
+                c.collect("2026-07-27", "2026-10-25", {"openalex": "2026-09-25"})
+            self.assertEqual(starts, ["2026-07-27"] * 3)
+
     def test_anonymous_openalex_pages_and_size_are_legal(self):
         with tempfile.TemporaryDirectory() as d:
             c = self.collector(d, "openalex")

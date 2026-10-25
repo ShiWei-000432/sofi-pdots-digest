@@ -138,7 +138,13 @@ class Collector:
     def collect(self, start, end, source_starts=None):
         records = []
         for source in self.cfg["sources"]:
-            source_start = (source_starts or {}).get(source, start)
+            # OpenAlex filters publication time here, not index time. Recheck the
+            # backfill window so late-indexed older publications remain discoverable.
+            source_start = (
+                start
+                if source == "openalex"
+                else (source_starts or {}).get(source, start)
+            )
             qs = (
                 [("ABC", "all categories; local domain filter")]
                 if source == "biorxiv"
