@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import smtplib
+from collections.abc import Callable
 from email.message import EmailMessage
 
 from .config import EmailConfig
@@ -89,3 +90,47 @@ def _build_subject(config: EmailConfig, digest: DigestRun) -> str:
     date_label = digest.generated_at.strftime("%Y-%m-%d")
     prefix = config.subject_prefix.strip()
     return f"{prefix} {date_label} | {summary}".strip()
+
+
+def send_weekly_message(
+    config: EmailConfig,
+    message: EmailMessage,
+    on_data: Callable[[], None],
+    on_accepted: Callable[[], None],
+) -> None:
+    """SMTP transaction milestones for the weekly outbox.
+
+    A transport error after on_data is ambiguous; callers must not auto-resend.
+    Persist acceptance before QUIT, whose failure cannot undo SMTP acceptance.
+    """
+    import ssl
+
+    password = _resolve_password(config)
+    server = None
+    try:
+        if config.use_tls:
+            server = smtplib.SMTP_SSL(
+                config.smtp_host,
+                config.smtp_port,
+                timeout=30,
+                context=ssl.create_default_context(),
+            )
+        else:
+            server = smtplib.SMTP(config.smtp_host, config.smtp_port, timeout=30)
+            server.ehlo()
+            if config.use_starttls:
+                server.starttls(context=ssl.create_default_context())
+                server.ehlo()
+        if config.username and password:
+            server.login(config.username, password)
+        on_data()
+        refused = server.send_message(message)
+        if refused:
+            raise smtplib.SMTPRecipientsRefused(refused)
+        on_accepted()
+    finally:
+        if server is not None:
+            try:
+                server.quit()
+            except (OSError, smtplib.SMTPException):
+                server.close()
