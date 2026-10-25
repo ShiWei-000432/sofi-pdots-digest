@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   sync-comment:
-    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion != 'cancelled' && github.event.workflow_run.conclusion != 'skipped'
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion != 'cancelled' && github.event.workflow_run.conclusion != 'skipped' && github.repository == 'X-PG13/paper-digest'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 

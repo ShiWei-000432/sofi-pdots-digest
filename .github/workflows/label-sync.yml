@@ -21,6 +21,7 @@ concurrency:
 
 jobs:
   sync-labels:
+    if: github.repository == 'X-PG13/paper-digest'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 

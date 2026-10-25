@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   issue-intake:
-    if: github.event_name == 'issues'
+    if: github.event_name == 'issues' && github.repository == 'X-PG13/paper-digest'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -90,7 +90,7 @@ jobs:
           fi
 
   pr-labels:
-    if: github.event_name == 'pull_request_target'
+    if: github.event_name == 'pull_request_target' && github.repository == 'X-PG13/paper-digest'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 

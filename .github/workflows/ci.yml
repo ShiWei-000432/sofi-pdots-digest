@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   verify:
+    if: github.repository == 'X-PG13/paper-digest'
     uses: ./.github/workflows/reusable-python-checks.yml
     permissions:
       contents: read

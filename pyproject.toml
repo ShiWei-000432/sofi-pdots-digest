@@ -32,6 +32,7 @@ Issues = "https://github.com/X-PG13/paper-digest/issues"
 Changelog = "https://github.com/X-PG13/paper-digest/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
+weekly = ["jsonschema>=4.23,<5", "Markdown>=3.7,<4", "bleach>=6.2,<7"]
 translation = [
   "ctranslate2==4.8.1",
   "sentencepiece==0.2.2",
@@ -48,6 +49,7 @@ dev = [
 
 [project.scripts]
 paper-digest = "paper_digest.cli:main"
+sofi-weekly = "paper_digest.weekly.cli:main"
 
 [tool.hatch.version]
 path = "paper_digest/__about__.py"
@@ -59,6 +61,8 @@ packages = ["paper_digest"]
 include = [
   "/paper_digest",
   "/tools",
+  "/scripts",
+  "/weekly.example.toml",
   "/tests",
   "/docs",
   "/README.md",
@@ -95,3 +99,7 @@ branch = true
 show_missing = true
 skip_covered = false
 fail_under = 100
+
+[tool.ruff.lint.per-file-ignores]
+"paper_digest/weekly/*.py" = ["E501"]
+"tests/test_weekly.py" = ["E501"]

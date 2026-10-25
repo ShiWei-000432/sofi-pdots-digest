@@ -1,4 +1,8 @@
-# Paper Digest
+# SOFI × Pdots 文献周报
+
+SOFI × Pdots 周报扩展：请先阅读 [中文使用说明](docs/SOFI-Pdots使用说明.md)，配置示例为 [weekly.example.toml](weekly.example.toml)。本机调度需要电脑在线；公开仓库不含凭据、私人周报或收件地址。
+
+上游 Paper Digest 的原始说明如下。
 
 [![CI](https://img.shields.io/github/actions/workflow/status/X-PG13/paper-digest/ci.yml?branch=main&label=CI)](https://github.com/X-PG13/paper-digest/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/X-PG13/paper-digest?display_name=tag)](https://github.com/X-PG13/paper-digest/releases)

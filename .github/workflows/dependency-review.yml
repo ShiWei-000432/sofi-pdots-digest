@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   dependency-review:
-    if: github.event.repository.private == false || vars.ENABLE_DEPENDENCY_REVIEW == 'true'
+    if: github.repository == 'X-PG13/paper-digest' && (github.event.repository.private == false || vars.ENABLE_DEPENDENCY_REVIEW == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

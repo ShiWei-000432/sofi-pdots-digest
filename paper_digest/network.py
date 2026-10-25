@@ -19,6 +19,7 @@ def fetch_bytes_with_retry(
     retry_backoff_seconds: float,
     error_factory: Callable[[str], Exception],
     operation_description: str,
+    max_retry_delay_seconds: float | None = None,
 ) -> bytes:
     """Fetch raw bytes with bounded retry and backoff."""
 
@@ -28,12 +29,31 @@ def fetch_bytes_with_retry(
                 payload = bytes(response.read())
         except HTTPError as exc:
             if exc.code in RETRYABLE_STATUS_CODES and attempt < retry_attempts:
+                delay = _retry_delay_seconds(
+                    http_error=exc,
+                    request_delay_seconds=request_delay_seconds,
+                    retry_backoff_seconds=retry_backoff_seconds,
+                    attempt=attempt,
+                )
+                if (
+                    max_retry_delay_seconds is not None
+                    and delay > max_retry_delay_seconds
+                ):
+                    raise error_factory(
+                        operation_description
+                        + ": retry delay exceeds run budget; retry later"
+                    ) from exc
                 sleep(
-                    _retry_delay_seconds(
-                        http_error=exc,
-                        request_delay_seconds=request_delay_seconds,
-                        retry_backoff_seconds=retry_backoff_seconds,
-                        attempt=attempt,
+                    min(
+                        max_retry_delay_seconds
+                        if max_retry_delay_seconds is not None
+                        else float("inf"),
+                        _retry_delay_seconds(
+                            http_error=exc,
+                            request_delay_seconds=request_delay_seconds,
+                            retry_backoff_seconds=retry_backoff_seconds,
+                            attempt=attempt,
+                        ),
                     )
                 )
                 continue
@@ -41,11 +61,16 @@ def fetch_bytes_with_retry(
         except OSError as exc:
             if attempt < retry_attempts:
                 sleep(
-                    _retry_delay_seconds(
-                        http_error=None,
-                        request_delay_seconds=request_delay_seconds,
-                        retry_backoff_seconds=retry_backoff_seconds,
-                        attempt=attempt,
+                    min(
+                        max_retry_delay_seconds
+                        if max_retry_delay_seconds is not None
+                        else float("inf"),
+                        _retry_delay_seconds(
+                            http_error=None,
+                            request_delay_seconds=request_delay_seconds,
+                            retry_backoff_seconds=retry_backoff_seconds,
+                            attempt=attempt,
+                        ),
                     )
                 )
                 continue

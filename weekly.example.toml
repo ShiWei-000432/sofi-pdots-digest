@@ -1,0 +1,46 @@
+timezone = "Asia/Shanghai"
+recipient = "reader@example.com"
+output_dir = "weekly-output"
+backfill_days = 90
+overlap_days = 30
+weekly_days = 7
+max_papers = 8
+min_score = 45
+sources = ["europepmc", "pubmed", "crossref", "openalex", "arxiv", "biorxiv"]
+# Optional: append "semantic_scholar". No paid API is enabled.
+
+[search]
+page_size = 100
+max_pages = 3
+max_requests_per_source = 40
+timeout = 25
+retries = 2
+extra_priority_terms = []
+# Separate vocabularies; source adapters construct their own query syntax.
+sofi = ["super-resolution optical fluctuation imaging", "super resolution optical fluctuation imaging", "balanced SOFI", "SOFI"]
+pdots = ["Pdot", "Pdots", "polymer dots", "semiconducting polymer dots", "conjugated polymer nanoparticles"]
+methods = ["fluorescence fluctuation", "super-resolution microscopy", "single-molecule localization", "computational microscopy"]
+qualifiers = ["artifact", "fidelity", "uncertainty", "confidence", "self-supervised", "physics-informed", "cumulant", "non-stationary", "blinking", "polarization", "background correction", "bleaching"]
+
+[analysis]
+provider = "codex_cli"
+# model = "..." # Omit to use local Codex default.
+max_candidates = 12
+max_fulltexts = 3
+max_input_chars = 40000
+timeout = 180
+retries = 1
+
+[schedule]
+weekday = 4 # Python Monday=0, Friday=4
+hour = 9
+minute = 0
+max_runtime_seconds = 5400 # entire scheduled run limit
+
+[email]
+host_env = "SMTP_HOST"
+port_env = "SMTP_PORT"
+username_env = "SMTP_USERNAME"
+password_env = "SMTP_PASSWORD"
+from_env = "SMTP_FROM"
+security_env = "SMTP_SECURITY" # ssl or starttls; no guessed server

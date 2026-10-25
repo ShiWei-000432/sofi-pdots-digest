@@ -17,3 +17,7 @@ reports/
 config.toml
 .paper-digest-state/
 .paper-digest-models/
+weekly-output/
+.env
+.env.*
+weekly.local.toml
