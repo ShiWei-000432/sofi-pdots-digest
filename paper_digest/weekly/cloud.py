@@ -272,11 +272,29 @@ def cloud_test(cfg, store, root):
     print("Cloud Codex summary validated; SMTP accepted migration test")
 
 
+def manual_request(operation):
+    if operation != "manual":
+        return None
+    run_id = os.getenv("GITHUB_RUN_ID", "")
+    if os.getenv("GITHUB_EVENT_NAME") != "workflow_dispatch" or not run_id.isdigit():
+        raise CloudError("Manual delivery requires an explicit workflow dispatch")
+    return "cloud_manual_" + run_id
+
+
 def main():
     os.umask(0o077)
     operation = os.getenv("CLOUD_OPERATION", "check")
-    if operation not in {"bootstrap", "test", "activate", "pause", "check", "weekly"}:
+    if operation not in {
+        "bootstrap",
+        "test",
+        "activate",
+        "pause",
+        "check",
+        "weekly",
+        "manual",
+    }:
         raise CloudError("Unsupported operation")
+    request_key = manual_request(operation)
     root = Path(os.environ["RUNNER_TEMP"]) / "sofi-private"
     root.mkdir(mode=0o700, exist_ok=True)
     vault = Vault(
@@ -343,19 +361,51 @@ def main():
                 raise CloudError(
                     "Uncertain SMTP outcome; manual reconciliation required"
                 )
-            if due(now, cfg, store.get_meta("last_sent_at")):
+            request = store.get_meta(request_key, {}) if request_key else {}
+            if request.get("accepted"):
+                print("Manual request already accepted; no duplicate message sent")
+                return
+            if request_key or due(now, cfg, store.get_meta("last_sent_at")):
                 week = (
                     (now - timedelta(days=(now.weekday() - 4) % 7)).date().isoformat()
                 )
-                attempts = store.get_meta("cloud_attempts", {})
+                attempt_key = (
+                    request_key + "_attempts" if request_key else "cloud_attempts"
+                )
+                attempts = store.get_meta(attempt_key, {})
                 if attempts.get("week") != week:
                     attempts = {"week": week, "count": 0}
                 if attempts["count"] >= 3:
                     raise CloudError("Weekly retry budget exhausted; review required")
                 attempts["count"] += 1
-                store.meta("cloud_attempts", attempts)
+                store.meta(attempt_key, attempts)
                 checkpoint()
-                report, out = run(cfg, store, now, root / "weekly-output")
+                if request.get("archive"):
+                    out = root / request["archive"]
+                    report = json.loads((out / "report.json").read_text())
+                else:
+                    print("Starting fresh multi-source retrieval", flush=True)
+                    report, out = run(cfg, store, now, root / "weekly-output")
+                print(
+                    "Report audit: "
+                    + json.dumps(
+                        {
+                            "fetched": report["fetched_count"],
+                            "unique": report["unique_count"],
+                            "eligible": report["eligible_count"],
+                            "selected": len(report["papers"]),
+                            "complete_coverage": report["complete"],
+                            "analysis_failures": len(report["analysis_failures"]),
+                            "archive": str(out.relative_to(root)),
+                            "papers": [
+                                {"title": p["title"], "id": p["id"]}
+                                for p in report["papers"]
+                            ],
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
                 if report["analysis_failures"]:
                     raise CloudError("Analysis incomplete; candidates retained")
                 if not report["complete"] and not any(
@@ -365,8 +415,15 @@ def main():
                     raise CloudError(
                         "Sources unavailable; not recording an empty success"
                     )
+                if request_key:
+                    request["archive"] = str(out.relative_to(root))
+                    store.meta(request_key, request)
                 checkpoint()
-                send(cfg, store, report, out)
+                outcome = send(cfg, store, report, out)
+                if request_key:
+                    request["accepted"] = outcome in ("accepted", "already_accepted")
+                    store.meta(request_key, request)
+                print("SMTP outcome: " + outcome, flush=True)
                 print("Weekly report accepted by SMTP; inbox delivery unverified")
             else:
                 print("No delivery due; cloud checkpoint and state healthy")

@@ -10,13 +10,26 @@ from unittest.mock import patch
 from cryptography.fernet import Fernet, InvalidToken
 
 from paper_digest.weekly.cli import load
-from paper_digest.weekly.cloud import CloudError, Vault, pack, unpack
+from paper_digest.weekly.cloud import CloudError, Vault, manual_request, pack, unpack
 from paper_digest.weekly.delivery import send
 from paper_digest.weekly.state import Store
 from tests.test_weekly import ROOT
 
 
 class CloudTests(unittest.TestCase):
+    def test_manual_run_requires_dispatch_and_stable_run_id(self):
+        with patch.dict(
+            os.environ, {"GITHUB_EVENT_NAME": "schedule", "GITHUB_RUN_ID": "123"}
+        ):
+            with self.assertRaises(CloudError):
+                manual_request("manual")
+        with patch.dict(
+            os.environ,
+            {"GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_RUN_ID": "123"},
+        ):
+            self.assertEqual(manual_request("manual"), "cloud_manual_123")
+            self.assertIsNone(manual_request("check"))
+
     def test_unpublished_draft_tag_can_be_replaced_by_github(self):
         with patch.object(Vault, "api", return_value={"private": True}):
             vault = Vault("owner/private", "test", Fernet.generate_key().decode())
